@@ -89,6 +89,22 @@ az functionapp deployment source config-zip -g rg-lobbylens-prod -n <funcAppName
 Run locally with `func start` (requires Azure Functions Core Tools and a `local.settings.json`
 — git-ignored; see the env-vars table).
 
+## Telemetry
+
+Service statistics are **aggregate-only by design**:
+
+- Blob request logs (leaderboard/meta downloads) pass through an ingestion-time
+  transform that **strips caller identity** — IP address, auth hash, UPN, object id —
+  before anything is stored, so full IPs never exist at rest.
+- Function telemetry (Application Insights) keeps Azure's default IP masking (last
+  octet zeroed) and is used for request counts and error rates only.
+- Stored match documents contain **no IPs and no raw identities** — only the one-way
+  hashed pseudonyms described above, from users who left "Contribute anonymous match
+  data" enabled.
+- Usage is measured as daily aggregates (request counts, distinct hashed ids). There is
+  no per-user profiling and no client identifier beyond the opt-in match report; the
+  ingest rate limiter holds IPs in memory only.
+
 ## License
 
 MIT — Copyright (c) 2026 xhodagx
