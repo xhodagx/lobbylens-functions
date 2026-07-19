@@ -38,18 +38,24 @@ validated, capped, and (future) rate-limited.
 
 ```json
 {
-  "schema": 1,
+  "schema": 2,
   "region": "US",
   "duos": false,
   "players": [
     { "h": "<heroCardId>", "p": 4, "t": 6, "r": 12000, "k": 150,
-      "c": "4 Mech · 2 Beast", "id": "<sha256(name)[..16]>", "me": false }
+      "c": "4 Mech · 2 Beast", "id": "<sha256(name)[..16]>",
+      "aid": "<sha256(accountId)[..16]>", "me": false }
   ]
 }
 ```
 `h` hero card id · `p` final place · `t` tech tier · `r` rating · `k` ladder rank ·
-`c` board comp · `id` **one-way hashed** battletag (no raw names) · `me` local player.
+`c` board comp · `id` **one-way hashed** battletag (no raw names) · `aid` **one-way
+hashed** stable account id (name-change-proof pseudonym for cross-game stats; `null`
+when the lobby roster wasn't readable) · `me` local player.
 The server adds `id` (document id), `region` partition key, and `ingestedUtc`.
+
+Schema history: **2** added `aid` (stable-identity hash) — additive, so `schema:1`
+docs stay valid; `aid` is absent/null on older senders.
 
 ## App settings (provided by the Bicep deployment)
 
