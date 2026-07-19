@@ -1,6 +1,5 @@
 using System.Text;
 using System.Text.Json;
-using System.Text.RegularExpressions;
 using Azure.Identity;
 using Azure.Storage.Blobs;
 using Azure.Storage.Blobs.Models;
@@ -19,11 +18,6 @@ public class RefreshLeaderboard
     private static readonly string[] Regions = { "US", "EU", "AP" };
 
     private static readonly HttpClient Http = CreateHttp();
-
-    private static readonly Regex RowRx = new(
-        "\\{\"rank\":(\\d+),\"accountid\":\"((?:[^\"\\\\]|\\\\.)*)\",\"rating\":(\\d+)",
-        RegexOptions.Compiled);
-    private static readonly Regex TotalPagesRx = new("\"totalPages\":(\\d+)", RegexOptions.Compiled);
 
     private static readonly Lazy<BlobContainerClient> Container = new(() =>
     {
@@ -78,14 +72,15 @@ public class RefreshLeaderboard
     }
 
     // Compact output: {"ts":<unix>,"players":[{"n":name,"r":rating,"k":rank},...]}
+    // Pages are parsed as real JSON (shape: leaderboard.rows[{rank,accountid,rating}],
+    // leaderboard.pagination.totalPages). GetString() fully unescapes names, so the
+    // re-serialize can never double-escape — the plugin then unescapes exactly once.
     private static async Task<(string json, int count)> BuildLeaderboardJson(string region, bool duo)
     {
         string board = duo ? "battlegroundsduo" : "battlegrounds";
 
         string first = await Http.GetStringAsync($"{BaseUrl}?region={region}&leaderboardId={board}&page=1");
-        int totalPages = 1;
-        Match tp = TotalPagesRx.Match(first);
-        if (tp.Success) totalPages = Math.Min(int.Parse(tp.Groups[1].Value), MaxPages);
+        int totalPages = Math.Min(TotalPages(first), MaxPages);
 
         var bodies = new List<string> { first };
         if (totalPages > 1)
@@ -111,12 +106,9 @@ public class RefreshLeaderboard
         int count = 0;
         foreach (string body in bodies)
         {
-            foreach (Match m in RowRx.Matches(body))
+            foreach ((string name, int rank, int rating) in Rows(body))
             {
-                string name = m.Groups[2].Value;
                 if (!seen.Add(name)) continue;
-                int rank = int.Parse(m.Groups[1].Value);
-                int rating = int.Parse(m.Groups[3].Value);
                 if (count++ > 0) sb.Append(',');
                 sb.Append("{\"n\":").Append(JsonSerializer.Serialize(name))
                   .Append(",\"r\":").Append(rating)
@@ -125,5 +117,45 @@ public class RefreshLeaderboard
         }
         sb.Append("]}");
         return (sb.ToString(), count);
+    }
+
+    private static int TotalPages(string body)
+    {
+        try
+        {
+            using JsonDocument doc = JsonDocument.Parse(body);
+            if (doc.RootElement.TryGetProperty("leaderboard", out JsonElement lb)
+                && lb.TryGetProperty("pagination", out JsonElement pg)
+                && pg.TryGetProperty("totalPages", out JsonElement tp)
+                && tp.TryGetInt32(out int pages)) { return pages; }
+        }
+        catch (JsonException) { }
+        return 1;
+    }
+
+    // Defensive row walk: a malformed page contributes nothing rather than throwing,
+    // and the caller's count==0 guard keeps a good blob from being overwritten.
+    private static List<(string Name, int Rank, int Rating)> Rows(string body)
+    {
+        var rows = new List<(string, int, int)>();
+        try
+        {
+            using JsonDocument doc = JsonDocument.Parse(body);
+            if (!doc.RootElement.TryGetProperty("leaderboard", out JsonElement lb)
+                || !lb.TryGetProperty("rows", out JsonElement arr)
+                || arr.ValueKind != JsonValueKind.Array) { return rows; }
+            foreach (JsonElement row in arr.EnumerateArray())
+            {
+                if (row.ValueKind != JsonValueKind.Object
+                    || !row.TryGetProperty("accountid", out JsonElement acc) || acc.ValueKind != JsonValueKind.String
+                    || !row.TryGetProperty("rank", out JsonElement rk) || !rk.TryGetInt32(out int rank)
+                    || !row.TryGetProperty("rating", out JsonElement rt) || !rt.TryGetInt32(out int rating)) { continue; }
+                string? name = acc.GetString();
+                if (string.IsNullOrWhiteSpace(name) || rating <= 0) { continue; }
+                rows.Add((name, rank, rating));
+            }
+        }
+        catch (JsonException) { }
+        return rows;
     }
 }

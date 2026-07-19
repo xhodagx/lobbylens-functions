@@ -19,11 +19,14 @@ Published as `leaderboard_{REGION}{_duo}.json` (e.g. `leaderboard_US.json`,
 
 ### `IngestMatch` (HTTP `POST /api/match`, anonymous)
 
-Accepts an anonymized match summary from the plugin, validates and size-caps it, stamps a
-server-owned `id` + `ingestedUtc` (never trusts the client's), and writes it to the Cosmos
-`matches` container (partitioned by `region`). Anonymous on purpose — a function key
-embedded in a public plugin DLL is extractable, so ingest is treated as low-trust:
-validated, capped, and (future) rate-limited.
+Accepts an anonymized match summary from the plugin, reads it through a hard 64 KB cap,
+validates every field against the schema (region must be `US`/`EU`/`AP`/`CN`, players
+typed and range-checked, ids hex hashes), and **rebuilds** a normalized document — nothing
+client-supplied is stored verbatim, and `id` + `ingestedUtc` are always server-owned.
+Writes go to the Cosmos `matches` container (partitioned by `region`). Anonymous on
+purpose — a function key embedded in a public plugin DLL is extractable, so ingest is
+treated as low-trust; a per-IP rate limit (60/hour, in-memory per instance, best-effort)
+blunts bulk junk. Invalid bodies get `400`, over-cap `413`, throttled `429`.
 
 ## Data contracts
 
