@@ -11,8 +11,8 @@ plugin clients and ingests anonymized match telemetry. Infrastructure lives in
 
 Fetches Blizzard's official leaderboards for **US / EU / AP × solo / duos** (six boards),
 de-duplicates, and publishes one compact JSON file per board to the `public` blob
-container. Plugin clients then fetch a single cached ~50 KB file instead of each paging the
-Blizzard API directly — the whole point of the backend at scale.
+container. Plugin clients then fetch a single cached file (~25–200 KB per board) instead of
+each paging the Blizzard API directly — the whole point of the backend at scale.
 
 Published as `leaderboard_{REGION}{_duo}.json` (e.g. `leaderboard_US.json`,
 `leaderboard_EU_duo.json`), anonymously readable, `Cache-Control: max-age=1800`.
@@ -55,7 +55,9 @@ blunts bulk junk. Invalid bodies get `400`, over-cap `413`, throttled `429`.
 `c` board comp · `id` **one-way hashed** battletag (no raw names) · `aid` **one-way
 hashed** stable account id (name-change-proof pseudonym for cross-game stats; `null`
 when the lobby roster wasn't readable) · `me` local player.
-The server adds `id` (document id), `region` partition key, and `ingestedUtc`.
+`region` must be one of `US`/`EU`/`AP`/`CN`. The server validates every field, rebuilds
+the document from the named schema fields only (anything else is dropped), and adds `id`
+(document id), the `region` partition key, and `ingestedUtc`.
 
 Schema history: **2** added `aid` (stable-identity hash) — additive, so `schema:1`
 docs stay valid; `aid` is absent/null on older senders.
