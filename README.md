@@ -2,8 +2,7 @@
 
 The backend service for [LobbyLens](https://github.com/xhodagx/LobbyLens) — an Azure
 Functions app (.NET 8 isolated) that mirrors Blizzard's Battlegrounds leaderboards for
-plugin clients and ingests anonymized match telemetry. Infrastructure lives in
-[lobbylens-infra](https://github.com/xhodagx/lobbylens-infra).
+plugin clients and ingests anonymized match telemetry.
 
 ## Functions
 
