@@ -89,6 +89,15 @@ az functionapp deployment source config-zip -g rg-lobbylens-prod -n <funcAppName
 Run locally with `func start` (requires Azure Functions Core Tools and a `local.settings.json`
 — git-ignored; see the env-vars table).
 
+### `FormStats` (HTTP `GET /api/form?ids=<hash,...>`, anonymous)
+
+Returns each player's recent average placement, aggregated from the stored match
+reports: `{"<hash>":{"n":<games>,"a":<avgPlace>},...}`. Lookups are **by hash only** —
+the plugin sends the same one-way battletag/account hashes it already reports, never a
+name — so the endpoint exposes nothing but an aggregate of consented, anonymized data.
+Validated hex ids (max 24), 15-minute in-memory cache with a negative cache for unknowns,
+per-IP rate limit, and a CDN cache header.
+
 ## Telemetry
 
 Service statistics are **aggregate-only by design**:
